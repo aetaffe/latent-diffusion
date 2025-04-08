@@ -59,6 +59,7 @@ class VQModel(pl.LightningModule):
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys)
         self.scheduler_config = scheduler_config
         self.lr_g_factor = lr_g_factor
+        self.automatic_optimization = False
 
     @contextmanager
     def ema_scope(self, context=None):
@@ -76,7 +77,7 @@ class VQModel(pl.LightningModule):
                     print(f"{context}: Restored training weights")
 
     def init_from_ckpt(self, path, ignore_keys=list()):
-        sd = torch.load(path, map_location="cpu")["state_dict"]
+        sd = torch.load(path, map_location="cpu", weights_only=False)["state_dict"]
         keys = list(sd.keys())
         for k in keys:
             for ik in ignore_keys:
@@ -139,11 +140,13 @@ class VQModel(pl.LightningModule):
             x = x.detach()
         return x
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    def training_step(self, batch, batch_idx):
         # https://github.com/pytorch/pytorch/issues/37142
         # try not to fool the heuristics
         x = self.get_input(batch, self.image_key)
         xrec, qloss, ind = self(x, return_pred_indices=True)
+        ae_opt, disc_opt = self.optimizers()
+        optimizer_idx = 0 if ae_opt else 1
 
         if optimizer_idx == 0:
             # autoencode
