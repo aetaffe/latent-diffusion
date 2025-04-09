@@ -165,3 +165,7 @@ src
 weights
 logs
 taming
+
+# HPC
+datasets
+jobs
