@@ -1303,8 +1303,8 @@ class LatentDiffusion(DDPM):
             diffusion_grid = rearrange(diffusion_row, 'n b c h w -> b n c h w')
             diffusion_grid = rearrange(diffusion_grid, 'b n c h w -> (b n) c h w')
             diffusion_grid = make_grid(diffusion_grid, nrow=diffusion_row.shape[0])
-            log["diffusion_row_image"] = diffusion_grid[:3, :, :]
-            log["diffusion_row_mask"] = diffusion_grid[3, :, :]
+            log["diffusion_row_image"] = diffusion_grid[:3, :, :].unsqueeze(0)
+            log["diffusion_row_mask"] = diffusion_grid[3, :, :].unsqueeze(0)
 
         if sample:
             # get denoise row
@@ -1360,8 +1360,8 @@ class LatentDiffusion(DDPM):
                                                                shape=(self.channels, self.image_size, self.image_size),
                                                                batch_size=N)
             prog_row = self._get_denoise_row_from_list(progressives, desc="Progressive Generation")
-            log["progressive_row_image"] = prog_row[:3, :, :]
-            log["progressive_row_mask"] = prog_row[3, :, :]
+            log["progressive_row_image"] = prog_row[:3, :, :].unsqueeze(0)
+            log["progressive_row_mask"] = prog_row[3, :, :].unsqueeze(0)
 
         if return_keys:
             if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:

@@ -324,6 +324,14 @@ class ImageLogger(Callback):
         root = os.path.join(save_dir, "images", split)
 
         for img_key in images:
+            print(f'Key----> {img_key}')
+            print(f'{images[img_key].shape}')
+            if len(images[img_key].shape) == 3 or images[img_key].shape[1] < 3:
+                images[img_key] = images[img_key].unsqueeze(1).repeat(1, 3, 1, 1)
+                print(f'New shape for mask: {images[img_key].shape}')
+            elif len(images[img_key].shape) == 2:
+                images[img_key] = images[img_key].unsqueeze(1).repeat(1, 3, 1)
+                print(f'New shape for diffusion row mask: {images[img_key].shape}')
             grid = torchvision.utils.make_grid(images[img_key], nrow=4)
             if self.rescale:
                 grid = (grid + 1.0) / 2.0  # -1,1 -> 0,1; c,h,w
