@@ -359,8 +359,9 @@ class ImageLogger(Callback):
                 for img_key in images:
                     tmp[img_key + '_mask'] = images[img_key][:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1)
                     tmp[img_key] = images[img_key][:, :3, :, :]
+                images = tmp
 
-            images = tmp
+            # images = tmp
             for k in images:
                 N = min(images[k].shape[0], self.max_images)
                 images[k] = images[k][:N]

@@ -1255,7 +1255,7 @@ class LatentDiffusion(DDPM):
 
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=4, sample=True, ddim_steps=200, ddim_eta=1., return_keys=None,
-                   quantize_denoised=True, inpaint=True, plot_denoise_rows=False, plot_progressive_rows=True,
+                   quantize_denoised=True, inpaint=False, plot_denoise_rows=False, plot_progressive_rows=True,
                    plot_diffusion_rows=True, **kwargs):
 
         use_ddim = ddim_steps is not None
@@ -1268,8 +1268,10 @@ class LatentDiffusion(DDPM):
                                            bs=N)
         N = min(x.shape[0], N)
         n_row = min(x.shape[0], n_row)
-        log["inputs"] = x
-        log["reconstruction"] = xrec
+        log["inputs_images"] = x[:, :3, :, :]
+        log["inputs_masks"] = x[:, 3, : , :]
+        log["reconstruction_image"] = xrec[:, :3, :, :]
+        log["reconstruction_mask"] = xrec[:, 3, : , :]
         if self.model.conditioning_key is not None:
             if hasattr(self.cond_stage_model, "decode"):
                 xc = self.cond_stage_model.decode(c)
@@ -1301,7 +1303,8 @@ class LatentDiffusion(DDPM):
             diffusion_grid = rearrange(diffusion_row, 'n b c h w -> b n c h w')
             diffusion_grid = rearrange(diffusion_grid, 'b n c h w -> (b n) c h w')
             diffusion_grid = make_grid(diffusion_grid, nrow=diffusion_row.shape[0])
-            log["diffusion_row"] = diffusion_grid
+            log["diffusion_row_image"] = diffusion_grid[:3, :, :]
+            log["diffusion_row_mask"] = diffusion_grid[3, :, :]
 
         if sample:
             # get denoise row
@@ -1310,7 +1313,8 @@ class LatentDiffusion(DDPM):
                                                          ddim_steps=ddim_steps,eta=ddim_eta)
                 # samples, z_denoise_row = self.sample(cond=c, batch_size=N, return_intermediates=True)
             x_samples = self.decode_first_stage(samples)
-            log["samples"] = x_samples
+            log["samples_image"] = x_samples[:, :3, :, :]
+            log["samples_mask"] = x_samples[:, 3, :, :]
             if plot_denoise_rows:
                 denoise_grid = self._get_denoise_row_from_list(z_denoise_row)
                 log["denoise_row"] = denoise_grid
@@ -1325,7 +1329,8 @@ class LatentDiffusion(DDPM):
                     # samples, z_denoise_row = self.sample(cond=c, batch_size=N, return_intermediates=True,
                     #                                      quantize_denoised=True)
                 x_samples = self.decode_first_stage(samples.to(self.device))
-                log["samples_x0_quantized"] = x_samples
+                log["samples_x0_quantized_image"] = x_samples[:, :3, :, :]
+                log["samples_x0_quantized_mask"] = x_samples[:, 3, :, :]
 
             if inpaint:
                 # make a simple center square
@@ -1355,7 +1360,8 @@ class LatentDiffusion(DDPM):
                                                                shape=(self.channels, self.image_size, self.image_size),
                                                                batch_size=N)
             prog_row = self._get_denoise_row_from_list(progressives, desc="Progressive Generation")
-            log["progressive_row"] = prog_row
+            log["progressive_row_image"] = prog_row[:3, :, :]
+            log["progressive_row_mask"] = prog_row[3, :, :]
 
         if return_keys:
             if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
