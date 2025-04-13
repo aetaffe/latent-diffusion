@@ -1,10 +1,11 @@
+import PIL
 from torch.utils.data import Dataset
 import albumentations
-import os
 import numpy as np
 from PIL import Image
 import supervision as sv
 import json
+from pathlib import Path
 
 class ImagePaths(Dataset):
     def __init__(self, paths, size=None, random_crop=False, labels=None):
@@ -55,16 +56,21 @@ class ImagePaths(Dataset):
             image = image.convert("RGB")
 
         image = np.array(image).astype(np.uint8)
-        image = np.concatenate([image, seg_mask])
         image = self.preprocessor(image=image)["image"]
+        seg_mask = np.array(Image.fromarray(seg_mask)
+                            .convert("L")
+                            .resize((self.size, self.size),
+                                    resample=PIL.Image.Resampling.NEAREST))
+        image = np.concatenate([image, seg_mask[:,:,np.newaxis]],axis=2)
+
         image = (image/127.5 - 1.0).astype(np.float32)
         return image
 
     def __getitem__(self, i):
         example = dict()
         example["image"] = self.preprocess_image(self.labels["file_path_"][i])
-        for k in self.labels:
-            example[k] = self.labels[k][i]
+        # for k in self.labels:
+        #     example[k] = self.labels[k][i]
         return example
 
 
@@ -88,12 +94,8 @@ class DatasetBase(Dataset):
         return ex
 
 class FLImTrain(DatasetBase):
-    def __init__(self, size, keys=None):
+    def __init__(self, size, root_dir, keys=None):
         super().__init__()
-        root = "/media/alex/1TBSSD/latent-diffusion/Datasets"
-        dataset_root = root + "/FLIm-Images-no-phantom-cropped"
-        with open(f'{root}/FLIm.txt', "r") as f:
-            relpaths = f.read().splitlines()
-        paths = [os.path.join(root, relpath) for relpath in relpaths]
+        paths = [str(path) for path in list(Path(root_dir).rglob('*.jpg'))]
         self.data = ImagePaths(paths=paths, size=size, random_crop=False)
         self.keys = keys

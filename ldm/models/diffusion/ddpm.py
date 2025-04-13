@@ -109,9 +109,9 @@ class DDPM(pl.LightningModule):
         self.loss_type = loss_type
 
         self.learn_logvar = learn_logvar
-        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
+        self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,)).to(self.device)
         if self.learn_logvar:
-            self.logvar = nn.Parameter(self.logvar, requires_grad=True)
+            self.logvar = nn.Parameter(self.logvar, requires_grad=True).to(self.device)
 
 
     def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000,
@@ -384,7 +384,8 @@ class DDPM(pl.LightningModule):
         log["inputs"] = x
 
         # get diffusion row
-        diffusion_row = list()
+        diffusion_row_img = list()
+        diffusion_row_mask = list()
         x_start = x[:n_row]
 
         for t in range(self.num_timesteps):
@@ -393,17 +394,21 @@ class DDPM(pl.LightningModule):
                 t = t.to(self.device).long()
                 noise = torch.randn_like(x_start)
                 x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-                diffusion_row.append(x_noisy)
+                diffusion_row_img.append(x_noisy[:,:3,:,:])
+                diffusion_row_mask.append(x_noisy[:,3,:,:])
 
-        log["diffusion_row"] = self._get_rows_from_list(diffusion_row)
+        log["diffusion_row_img"] = self._get_rows_from_list(diffusion_row_img)
+        log["diffusion_row_mask"] = self._get_rows_from_list(diffusion_row_mask)
 
         if sample:
             # get denoise row
             with self.ema_scope("Plotting"):
                 samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
 
-            log["samples"] = samples
-            log["denoise_row"] = self._get_rows_from_list(denoise_row)
+            log["samples_images"] = samples[:, :3, :, :]
+            log["samples_mask"] = samples[:, 3, :, :]
+            log["denoise_row_img"] = self._get_rows_from_list([img[:, :3, :, :] for img in denoise_row])
+            log["denoise_row_mask"] = self._get_rows_from_list([img[:, 3, :, :] for img in denoise_row])
 
         if return_keys:
             if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
@@ -475,7 +480,7 @@ class LatentDiffusion(DDPM):
 
     @rank_zero_only
     @torch.no_grad()
-    def on_train_batch_start(self, batch, batch_idx, dataloader_idx):
+    def on_train_batch_start(self, batch, batch_idx):
         # only for very first batch
         if self.scale_by_std and self.current_epoch == 0 and self.global_step == 0 and batch_idx == 0 and not self.restarted_from_ckpt:
             assert self.scale_factor == 1., 'rather not use custom rescaling and std-rescaling simultaneously'
@@ -1027,6 +1032,7 @@ class LatentDiffusion(DDPM):
         loss_simple = self.get_loss(model_output, target, mean=False).mean([1, 2, 3])
         loss_dict.update({f'{prefix}/loss_simple': loss_simple.mean()})
 
+        self.logvar = self.logvar.to(self.device)
         logvar_t = self.logvar[t].to(self.device)
         loss = loss_simple / torch.exp(logvar_t) + logvar_t
         # loss = loss_simple / torch.exp(self.logvar) + self.logvar

@@ -289,7 +289,7 @@ class SetupCallback(Callback):
 class ImageLogger(Callback):
     def __init__(self, batch_frequency, max_images, clamp=True, increase_log_steps=True,
                  rescale=True, disabled=False, log_on_batch_idx=False, log_first_step=False,
-                 log_images_kwargs=None):
+                 log_images_kwargs=None, autoencoder=False):
         super().__init__()
         self.rescale = rescale
         self.batch_freq = batch_frequency
@@ -305,6 +305,7 @@ class ImageLogger(Callback):
         self.log_on_batch_idx = log_on_batch_idx
         self.log_images_kwargs = log_images_kwargs if log_images_kwargs else {}
         self.log_first_step = log_first_step
+        self.autoencoder = autoencoder
 
     @rank_zero_only
     def _tensorboard(self, pl_module, images, batch_idx, split):
@@ -354,9 +355,10 @@ class ImageLogger(Callback):
                 images = pl_module.log_images(batch, split=split, **self.log_images_kwargs)
 
             tmp = {}
-            for img_key in images:
-                tmp[img_key + '_mask'] = images[img_key][:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1)
-                tmp[img_key] = images[img_key][:, :3, :, :]
+            if self.autoencoder:
+                for img_key in images:
+                    tmp[img_key + '_mask'] = images[img_key][:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1)
+                    tmp[img_key] = images[img_key][:, :3, :, :]
 
             images = tmp
             for k in images:

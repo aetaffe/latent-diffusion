@@ -168,8 +168,9 @@ class VQModel(pl.LightningModule):
                                                   last_layer=self.get_last_layer(),
                                                   split="train")
         ae_loss = ae_img_loss + ae_mask_loss
+        for key in log_dict_ae_img.keys():
+            log_dict_ae_img[key] += log_dict_ae_mask[key]
         self.log_dict(log_dict_ae_img, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-        self.log_dict(log_dict_ae_mask, prog_bar=False, logger=True, on_step=True, on_epoch=True)
         ae_opt.zero_grad()
         ae_loss.backward()
         ae_opt.step()
@@ -194,8 +195,9 @@ class VQModel(pl.LightningModule):
                                                   last_layer=self.get_last_layer(),
                                                   split="train")
         disc_loss = disc_img_loss + disc_mask_loss
+        for key in log_dict_disc_img.keys():
+            log_dict_disc_img[key] += log_dict_disc_mask[key]
         self.log_dict(log_dict_disc_img, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-        self.log_dict(log_dict_disc_mask, prog_bar=False, logger=True, on_step=True, on_epoch=True)
         disc_opt.zero_grad()
         disc_loss.backward()
         disc_opt.step()
@@ -211,28 +213,52 @@ class VQModel(pl.LightningModule):
     def _validation_step(self, batch, batch_idx, suffix=""):
         x = self.get_input(batch, self.image_key)
         xrec, qloss, ind = self(x, return_pred_indices=True)
-        aeloss, log_dict_ae = self.loss(qloss, x, xrec, 0,
-                                        self.global_step,
-                                        last_layer=self.get_last_layer(),
-                                        split="val"+suffix,
-                                        predicted_indices=ind
-                                        )
+        ae_img_loss, log_dict_ae_img = self.loss(qloss,
+                                                x[:, :3, :, :],
+                                                xrec[:, :3, :, :],
+                                                0,
+                                                self.global_step,
+                                                last_layer=self.get_last_layer(),
+                                                split="val"+suffix)
 
-        discloss, log_dict_disc = self.loss(qloss, x, xrec, 1,
-                                            self.global_step,
-                                            last_layer=self.get_last_layer(),
-                                            split="val"+suffix,
-                                            predicted_indices=ind
-                                            )
-        rec_loss = log_dict_ae[f"val{suffix}/rec_loss"]
+        ae_mask_loss, log_dict_ae_mask = self.loss(qloss,
+                                                  x[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
+                                                  xrec[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
+                                                  0,
+                                                  self.global_step,
+                                                  last_layer=self.get_last_layer(),
+                                                  split="val"+suffix)
+
+        disc_img_loss, log_dict_disc_img = self.loss(qloss,
+                                                x[:, :3, :, :],
+                                                xrec[:, :3, :, :],
+                                                1,
+                                                self.global_step,
+                                                last_layer=self.get_last_layer(),
+                                                split="val"+suffix)
+
+        (disc_mask_loss, log_dict_disc_mask) = self.loss(qloss,
+                                                  x[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
+                                                  xrec[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
+                                                  1,
+                                                  self.global_step,
+                                                  last_layer=self.get_last_layer(),
+                                                  split="val"+suffix)
+        for key in log_dict_ae_img:
+            log_dict_ae_img[key] += log_dict_ae_mask[key]
+        for key in log_dict_disc_img:
+            log_dict_disc_img[key] += log_dict_disc_mask[key]
+        aeloss = ae_img_loss + ae_mask_loss
+        rec_loss = log_dict_ae_img[f"val{suffix}/rec_loss"]
         self.log(f"val{suffix}/rec_loss", rec_loss,
                    prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.log(f"val{suffix}/aeloss", aeloss,
                    prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        if version.parse(pl.__version__) >= version.parse('1.4.0'):
-            del log_dict_ae[f"val{suffix}/rec_loss"]
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # if version.parse(pl.__version__) >= version.parse('1.4.0'):
+        del log_dict_ae_img[f"val{suffix}/rec_loss"]
+        del log_dict_ae_mask[f"val{suffix}/rec_loss"]
+        self.log_dict(log_dict_ae_img)
+        self.log_dict(log_dict_disc_img)
         return self.log_dict
 
     def configure_optimizers(self):

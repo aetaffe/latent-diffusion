@@ -4,7 +4,6 @@ import PIL
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
-import albumentations
 
 class Cholec8kDataset(Dataset):
     def __init__(self, root_dir, size):

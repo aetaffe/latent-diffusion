@@ -34,7 +34,12 @@ data:
     train:
       target: ldm.data.cholec_8k_dataset.Cholec8kDataset
       params:
-        root_dir: "/home/ataffe/SyntheticData/latent-diffusion/datasets/CholecSeg8k"
+        root_dir: "/media/alex/1TBSSD/SSD/Segmentation_Datasets/CholecSeg8k/train"
+        size: 256
+    validation:
+      target: ldm.data.cholec_8k_dataset.Cholec8kDataset
+      params:
+        root_dir: "/media/alex/1TBSSD/SSD/Segmentation_Datasets/CholecSeg8k/validation"
         size: 256
 
 lightning:
