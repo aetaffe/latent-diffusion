@@ -15,10 +15,11 @@ class ImagePaths(Dataset):
         self.labels = dict() if labels is None else labels
         self.labels["file_path_"] = paths
         self._length = len(paths)
-
         if self.size is not None and self.size > 0:
             augmentations = []
             if self.use_augmentations:
+                print(
+                    f'Using RandomeSizedCrop, HorizontalFlip, Rotate, Color Jitter augmentations with augment percentage: {aug_p}')
                 augmentations.extend([
                     albumentations.RandomSizedCrop(
                         min_max_height=(self.size//2, self.size//2),
