@@ -66,7 +66,7 @@ data:
         size: 256
         root_dir: /home/ataffe/SyntheticData/latent-diffusion/datasets/FLIm-Images-no-phantom-cropped
         use_augmentations: True
-        aug_p: 0.2
+        aug_p: 0.25
 
 
 lightning:
