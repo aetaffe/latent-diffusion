@@ -39,7 +39,7 @@ model:
       params:
         embed_dim: 256
         n_embed: 1024
-        ckpt_path: /media/alex/1TBSSD/latent-diffusion/model_checkpoints/autoencoder-cholec8kseg/autoencoder-cholec8kseg.ckpt
+        ckpt_path: /media/alex/1TBSSD/research_latent_diffusion/model_checkpoints/autoencoder-cholec8kseg/autoencoder-cholec8kseg.ckpt
         ddconfig:
           double_z: false
           z_channels: 256
@@ -64,7 +64,9 @@ data:
       target: ldm.data.FLIm.FLImTrain
       params:
         size: 256
-        root_dir: /media/alex/1TBSSD/SSD/FLImDataset/FLIm-Images-no-phantom-cropped
+        root_dir: /media/alex/1TBSSD/research_latent_diffusion/Datasets/FLIm-Images-no-phantom-cropped
+        use_augmentations: True
+        aug_p: 0.2
 
 
 lightning:
@@ -72,9 +74,10 @@ lightning:
     image_logger:
       target: main.ImageLogger
       params:
-        batch_frequency: 50
+        batch_frequency: 5000
         max_images: 8
         increase_log_steps: False
 
   trainer:
     benchmark: True
+    max_epochs: 2000

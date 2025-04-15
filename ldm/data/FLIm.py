@@ -6,23 +6,31 @@ from PIL import Image
 import supervision as sv
 import json
 from pathlib import Path
+import cv2
 
 class ImagePaths(Dataset):
-    def __init__(self, paths, size=None, random_crop=False, labels=None):
+    def __init__(self, paths, size=None, use_augmentations=False, aug_p=0.2, labels=None):
         self.size = size
-        self.random_crop = random_crop
-
+        self.use_augmentations = use_augmentations
         self.labels = dict() if labels is None else labels
         self.labels["file_path_"] = paths
         self._length = len(paths)
 
         if self.size is not None and self.size > 0:
-            self.rescaler = albumentations.SmallestMaxSize(max_size = self.size)
-            if not self.random_crop:
-                self.cropper = albumentations.CenterCrop(height=self.size,width=self.size)
-            else:
-                self.cropper = albumentations.RandomCrop(height=self.size,width=self.size)
-            self.preprocessor = albumentations.Compose([self.rescaler, self.cropper])
+            augmentations = []
+            if self.use_augmentations:
+                augmentations.extend([
+                    albumentations.RandomSizedCrop(
+                        min_max_height=(self.size//2, self.size//2),
+                        size=(self.size, self.size),
+                        interpolation=cv2.INTER_LANCZOS4,
+                        mask_interpolation=cv2.INTER_NEAREST),
+                    albumentations.HorizontalFlip(p=aug_p),
+                    albumentations.Rotate(limit=(-90,90), p=aug_p),
+                    albumentations.ColorJitter(p=aug_p),
+                ])
+
+            self.preprocessor = albumentations.Compose(augmentations)
         else:
             self.preprocessor = lambda **kwargs: kwargs
 
@@ -55,14 +63,16 @@ class ImagePaths(Dataset):
         elif not image.mode == "RGB":
             image = image.convert("RGB")
 
+        image = image.resize((self.size, self.size), resample=Image.Resampling.LANCZOS)
         image = np.array(image).astype(np.uint8)
-        image = self.preprocessor(image=image)["image"]
         seg_mask = np.array(Image.fromarray(seg_mask)
                             .convert("L")
                             .resize((self.size, self.size),
                                     resample=PIL.Image.Resampling.NEAREST))
+        processed = self.preprocessor(image=image, mask=seg_mask)
+        image = processed['image']
+        seg_mask = processed['mask']
         image = np.concatenate([image, seg_mask[:,:,np.newaxis]],axis=2)
-
         image = (image/127.5 - 1.0).astype(np.float32)
         return image
 
@@ -94,8 +104,8 @@ class DatasetBase(Dataset):
         return ex
 
 class FLImTrain(DatasetBase):
-    def __init__(self, size, root_dir, keys=None):
+    def __init__(self, size, root_dir, keys=None, use_augmentations=False, aug_p=0.2):
         super().__init__()
         paths = [str(path) for path in list(Path(root_dir).rglob('*.jpg'))]
-        self.data = ImagePaths(paths=paths, size=size, random_crop=False)
+        self.data = ImagePaths(paths=paths, size=size, use_augmentations=use_augmentations, aug_p=aug_p)
         self.keys = keys
