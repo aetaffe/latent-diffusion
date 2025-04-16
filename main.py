@@ -532,7 +532,7 @@ if __name__ == "__main__":
         # merge trainer cli with config
         trainer_config = lightning_config.get("trainer", OmegaConf.create())
         # default to ddp
-        trainer_config["accelerator"] = "ddp"
+        trainer_config["accelerator"] = "auto"
         # trainer_config["gpus"] = 1
         for k in nondefault_trainer_args(opt):
             trainer_config[k] = getattr(opt, k)
@@ -678,8 +678,11 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
 
         # trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-        trainer = Trainer(**trainer_kwargs)
+        trainer_args = {**trainer_kwargs, **trainer_config}
+        trainer = Trainer(**trainer_args)
         trainer.logdir = logdir  ###
+        print(f'Training for {trainer.max_epochs} min epochs.')
+        print(f'Training for {trainer.min_epochs} max epochs.')
 
         # data
         data = instantiate_from_config(config.data)

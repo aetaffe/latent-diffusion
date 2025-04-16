@@ -80,5 +80,5 @@ lightning:
 
   trainer:
     benchmark: True
-    # Should
-    max_epochs: 1670
+    min_epochs: 10000
+    max_epochs: 10000

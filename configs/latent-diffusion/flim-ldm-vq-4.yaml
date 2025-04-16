@@ -81,3 +81,4 @@ lightning:
   trainer:
     benchmark: True
     max_epochs: 2000
+    min_epochs: 2000
