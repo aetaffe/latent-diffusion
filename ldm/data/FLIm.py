@@ -9,29 +9,37 @@ from pathlib import Path
 import cv2
 
 class ImagePaths(Dataset):
-    def __init__(self, paths, size=None, use_augmentations=False, aug_p=0.2, labels=None):
+    def __init__(self, paths, size=None, aug_p=0.2, labels=None, crop_aug= False, geometric_aug=False, color_aug=False):
         self.size = size
-        self.use_augmentations = use_augmentations
         self.labels = dict() if labels is None else labels
         self.labels["file_path_"] = paths
         self._length = len(paths)
         if self.size is not None and self.size > 0:
             augmentations = []
-            if self.use_augmentations:
-                print(
-                    f'Using RandomeSizedCrop, HorizontalFlip, Rotate, Color Jitter augmentations with augment percentage: {aug_p}')
-                augmentations.extend([
-                    albumentations.RandomSizedCrop(
-                        min_max_height=(self.size//2, self.size//2),
-                        size=(self.size, self.size),
-                        interpolation=cv2.INTER_LANCZOS4,
-                        mask_interpolation=cv2.INTER_NEAREST,
-                        p=aug_p),
-                    albumentations.HorizontalFlip(p=aug_p),
-                    albumentations.Rotate(limit=(-90,90), p=aug_p),
-                    albumentations.ColorJitter(p=aug_p),
-                ])
-
+            if crop_aug or geometric_aug or color_aug:
+                if crop_aug:
+                    print("Using RandomSizedCrop")
+                    augmentations.append(
+                        albumentations.RandomSizedCrop(
+                            min_max_height=(self.size//2, self.size//2),
+                            size=(self.size, self.size),
+                            interpolation=cv2.INTER_LANCZOS4,
+                            mask_interpolation=cv2.INTER_NEAREST,
+                            p=aug_p),
+                    )
+                if geometric_aug:
+                    print("Using HorizontalFlip and Rotate")
+                    augmentations.extend(
+                        [
+                            albumentations.HorizontalFlip(p=aug_p),
+                            albumentations.Rotate(limit=90, p=aug_p),
+                        ]
+                    )
+                if color_aug:
+                    print("Using ColorJitter")
+                    augmentations.append(
+                        albumentations.ColorJitter(p=aug_p),
+                    )
             self.preprocessor = albumentations.Compose(augmentations)
         else:
             self.preprocessor = lambda **kwargs: kwargs
@@ -67,23 +75,23 @@ class ImagePaths(Dataset):
 
         image = image.resize((self.size, self.size), resample=Image.Resampling.LANCZOS)
         image = np.array(image).astype(np.uint8)
+        orig_img = image.copy()
         seg_mask = np.array(Image.fromarray(seg_mask)
                             .convert("L")
                             .resize((self.size, self.size),
                                     resample=PIL.Image.Resampling.NEAREST))
+        orig_seg_mask = seg_mask.copy()
         processed = self.preprocessor(image=image, mask=seg_mask)
         image = processed['image']
         seg_mask = processed['mask']
         image = np.concatenate([image, seg_mask[:,:,np.newaxis]],axis=2)
         image = (image/127.5 - 1.0).astype(np.float32)
-        return image
+        orig_img = np.concatenate([orig_img, orig_seg_mask[:,:,np.newaxis]],axis=2)
+        orig_img = (orig_img/127.5 - 1.0).astype(np.float32)
+        return {"image": image, "orig_img": orig_img}
 
     def __getitem__(self, i):
-        example = dict()
-        example["image"] = self.preprocess_image(self.labels["file_path_"][i])
-        # for k in self.labels:
-        #     example[k] = self.labels[k][i]
-        return example
+        return self.preprocess_image(self.labels["file_path_"][i])
 
 
 class DatasetBase(Dataset):
@@ -106,8 +114,8 @@ class DatasetBase(Dataset):
         return ex
 
 class FLImTrain(DatasetBase):
-    def __init__(self, size, root_dir, keys=None, use_augmentations=False, aug_p=0.2):
+    def __init__(self, size, root_dir, keys=None, crop_aug= False, geometric_aug=False, color_aug=False, aug_p=0.2):
         super().__init__()
         paths = [str(path) for path in list(Path(root_dir).rglob('*.jpg'))]
-        self.data = ImagePaths(paths=paths, size=size, use_augmentations=use_augmentations, aug_p=aug_p)
+        self.data = ImagePaths(paths=paths, size=size, crop_aug=crop_aug, geometric_aug=geometric_aug, color_aug=color_aug, aug_p=aug_p)
         self.keys = keys

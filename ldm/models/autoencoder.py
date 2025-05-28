@@ -1,4 +1,5 @@
 import torch
+import cv2
 import pytorch_lightning as pl
 import torch.nn.functional as F
 from contextlib import contextmanager
@@ -143,8 +144,9 @@ class VQModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # https://github.com/pytorch/pytorch/issues/37142
         # try not to fool the heuristics
-        x = self.get_input(batch, self.image_key)
-        xrec, qloss, ind = self(x, return_pred_indices=True)
+        x_aug = self.get_input(batch, self.image_key)
+        x_orig = self.get_input(batch, "orig_img")
+        xrec, qloss, ind = self(x_aug, return_pred_indices=True)
         ae_opt, disc_opt = self.optimizers()
 
         # autoencode
@@ -153,7 +155,7 @@ class VQModel(pl.LightningModule):
         #                                 predicted_indices=ind)
         self.toggle_optimizer(ae_opt)
         ae_img_loss, log_dict_ae_img = self.loss(qloss,
-                                                x[:, :3, :, :],
+                                                x_orig[:, :3, :, :],
                                                 xrec[:, :3, :, :],
                                                 0,
                                                 self.global_step,
@@ -161,7 +163,7 @@ class VQModel(pl.LightningModule):
                                                 split="train")
 
         ae_mask_loss, log_dict_ae_mask = self.loss(qloss,
-                                                  x[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
+                                                  x_orig[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
                                                   xrec[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
                                                   0,
                                                   self.global_step,
@@ -180,7 +182,7 @@ class VQModel(pl.LightningModule):
         # discriminator
         self.toggle_optimizer(disc_opt)
         disc_img_loss, log_dict_disc_img = self.loss(qloss,
-                                                x[:, :3, :, :],
+                                                x_orig[:, :3, :, :],
                                                 xrec[:, :3, :, :],
                                                 1,
                                                 self.global_step,
@@ -188,7 +190,7 @@ class VQModel(pl.LightningModule):
                                                 split="train")
 
         (disc_mask_loss, log_dict_disc_mask) = self.loss(qloss,
-                                                  x[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
+                                                  x_orig[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
                                                   xrec[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
                                                   1,
                                                   self.global_step,
@@ -211,10 +213,11 @@ class VQModel(pl.LightningModule):
         return log_dict
 
     def _validation_step(self, batch, batch_idx, suffix=""):
-        x = self.get_input(batch, self.image_key)
-        xrec, qloss, ind = self(x, return_pred_indices=True)
+        x_aug = self.get_input(batch, self.image_key)
+        xrec, qloss, ind = self(x_aug, return_pred_indices=True)
+        x_orig = self.get_input(batch, "orig_img")
         ae_img_loss, log_dict_ae_img = self.loss(qloss,
-                                                x[:, :3, :, :],
+                                                x_orig[:, :3, :, :],
                                                 xrec[:, :3, :, :],
                                                 0,
                                                 self.global_step,
@@ -222,7 +225,7 @@ class VQModel(pl.LightningModule):
                                                 split="val"+suffix)
 
         ae_mask_loss, log_dict_ae_mask = self.loss(qloss,
-                                                  x[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
+                                                  x_orig[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
                                                   xrec[:, 3, :, :].unsqueeze(1).repeat(1,3,1,1),
                                                   0,
                                                   self.global_step,
@@ -230,7 +233,7 @@ class VQModel(pl.LightningModule):
                                                   split="val"+suffix)
 
         disc_img_loss, log_dict_disc_img = self.loss(qloss,
-                                                x[:, :3, :, :],
+                                                x_orig[:, :3, :, :],
                                                 xrec[:, :3, :, :],
                                                 1,
                                                 self.global_step,
@@ -238,7 +241,7 @@ class VQModel(pl.LightningModule):
                                                 split="val"+suffix)
 
         (disc_mask_loss, log_dict_disc_mask) = self.loss(qloss,
-                                                  x[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
+                                                  x_orig[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
                                                   xrec[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1),
                                                   1,
                                                   self.global_step,
@@ -250,6 +253,15 @@ class VQModel(pl.LightningModule):
             log_dict_disc_img[key] += log_dict_disc_mask[key]
         aeloss = ae_img_loss + ae_mask_loss
         rec_loss = log_dict_ae_img[f"val{suffix}/rec_loss"]
+        
+        image_psnr = cv2.PSNR(xrec[:, :3, :, :].cpu().numpy(), x_orig[:, :3, :, :].cpu().numpy(), 255.)
+        mask_psnr = cv2.PSNR(xrec[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1).cpu().numpy(),
+         x_orig[:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1).cpu().numpy(), 255.)
+        self.log(f"val{suffix}/psnr", image_psnr,
+                   prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
+        self.log(f"val{suffix}/mask_psnr", mask_psnr,
+                   prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
+
         self.log(f"val{suffix}/rec_loss", rec_loss,
                    prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.log(f"val{suffix}/aeloss", aeloss,
@@ -300,7 +312,7 @@ class VQModel(pl.LightningModule):
 
     def log_images(self, batch, only_inputs=False, plot_ema=False, **kwargs):
         log = dict()
-        x = self.get_input(batch, self.image_key)
+        x = self.get_input(batch, "orig_img")
         x = x.to(self.device)
         if only_inputs:
             log["inputs"] = x

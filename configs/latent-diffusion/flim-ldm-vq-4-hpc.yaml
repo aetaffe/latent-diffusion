@@ -39,7 +39,7 @@ model:
       params:
         embed_dim: 256
         n_embed: 1024
-        ckpt_path: /home/ataffe/SyntheticData/latent-diffusion/logs/2025-04-09T04-49-29_autoencoder_vq_cholec_64x64x4/checkpoints/last.ckpt
+        ckpt_path: /home/ataffe/SyntheticData/latent-diffusion/logs/2025-04-09T04-49-29_autoencoder_vq_cholec_64x64x4/checkpoints/epoch=002520.ckpt
         ddconfig:
           double_z: false
           z_channels: 256
@@ -64,9 +64,12 @@ data:
       target: ldm.data.FLIm.FLImTrain
       params:
         size: 256
-        root_dir: /home/ataffe/SyntheticData/latent-diffusion/datasets/FLIm-Images-no-phantom-cropped
-        use_augmentations: True
-        aug_p: 0.25
+        root_dir: /home/ataffe/SyntheticData/latent-diffusion/datasets/FLIm-Images-no-phantom-cropped/train
+    validation:
+      target: ldm.data.FLIm.FLImTrain
+      params:
+        size: 256
+        root_dir: /home/ataffe/SyntheticData/latent-diffusion/datasets/FLIm-Images-no-phantom-cropped/validation
 
 
 lightning:

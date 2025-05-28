@@ -306,6 +306,8 @@ class ImageLogger(Callback):
         self.log_images_kwargs = log_images_kwargs if log_images_kwargs else {}
         self.log_first_step = log_first_step
         self.autoencoder = autoencoder
+        if self.autoencoder:
+            print("Autoencoder mode enabled. Expecting 4 channels in the images.")
 
     @rank_zero_only
     def _tensorboard(self, pl_module, images, batch_idx, split):
@@ -360,6 +362,7 @@ class ImageLogger(Callback):
             tmp = {}
             if self.autoencoder:
                 for img_key in images:
+                    print(f'{img_key} shape: {images[img_key].shape}')
                     tmp[img_key + '_mask'] = images[img_key][:, 3, :, :].unsqueeze(1).repeat(1, 3, 1, 1)
                     tmp[img_key] = images[img_key][:, :3, :, :]
                 images = tmp
@@ -678,8 +681,9 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
 
         # trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-        del trainer_config['gpus']
         trainer_args = {**trainer_kwargs, **trainer_config}
+        if 'gpus' in trainer_args:
+            del trainer_args['gpus']
         trainer = Trainer(**trainer_args)
         trainer.logdir = logdir  ###
         print(f'Training for {trainer.max_epochs} min epochs.')
@@ -756,12 +760,12 @@ if __name__ == "__main__":
                 import pdb as debugger
             debugger.post_mortem()
         raise
-    finally:
-        # move newly created debug project to debug_runs
-        if opt.debug and not opt.resume and trainer.global_rank == 0:
-            dst, name = os.path.split(logdir)
-            dst = os.path.join(dst, "debug_runs", name)
-            os.makedirs(os.path.split(dst)[0], exist_ok=True)
-            os.rename(logdir, dst)
-        if trainer.global_rank == 0:
-            print(trainer.profiler.summary())
+    # finally:
+    #     # move newly created debug project to debug_runs
+    #     if opt.debug and not opt.resume and trainer.global_rank == 0:
+    #         dst, name = os.path.split(logdir)
+    #         dst = os.path.join(dst, "debug_runs", name)
+    #         os.makedirs(os.path.split(dst)[0], exist_ok=True)
+    #         os.rename(logdir, dst)
+    #     if trainer.global_rank == 0:
+    #         print(trainer.profiler.summary())
