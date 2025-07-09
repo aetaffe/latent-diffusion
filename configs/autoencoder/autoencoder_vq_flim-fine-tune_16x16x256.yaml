@@ -32,14 +32,14 @@ data:
     batch_size: 8
     wrap: False
     train:
-      target: ldm.data.FLIm.FLImTrain
+      target: ldm.data.FLIm-seg.FLImTrain
       params:
         root_dir: "datasets/FLIm-Images-no-phantom-cropped/train"
         size: 256
         use_augmentations: True
         aug_p: 0.35
     validation:
-      target: ldm.data.FLIm.FLImTrain
+      target: ldm.data.FLIm-seg.FLImTrain
       params:
         root_dir: "datasets/FLIm-Images-no-phantom-cropped/validation"
         size: 256

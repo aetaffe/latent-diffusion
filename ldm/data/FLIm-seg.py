@@ -1,7 +1,10 @@
+import PIL
 from torch.utils.data import Dataset
 import albumentations
 import numpy as np
 from PIL import Image
+import supervision as sv
+import json
 from pathlib import Path
 import cv2
 
@@ -44,17 +47,48 @@ class ImagePaths(Dataset):
     def __len__(self):
         return self._length
 
+    @staticmethod
+    def _polygon_to_mask(polygons, width, height):
+        mask = np.zeros((height, width))
+        for shape in polygons:
+            if shape['label'] == 'AimingBeam':
+                points = np.int32(shape['points'])
+                instr_mask = sv.polygon_to_mask(np.array(points), (width, height))
+                instr_mask = np.where(instr_mask == 1, 255, 0)
+                mask += instr_mask
+        return mask
+
+    def _get_segmentation_mask(self, fname):
+        mask_json_fname = fname.replace('.jpg', '.json')
+        with open(mask_json_fname) as f:
+            mask_json = json.load(f)
+            mask = self._polygon_to_mask(mask_json['shapes'], mask_json['imageWidth'], mask_json['imageHeight']).astype(np.uint8)
+        return mask
+
     def preprocess_image(self, image_path):
         image = Image.open(image_path)
-        image = image.convert("RGB")
+        seg_mask = self._get_segmentation_mask(image_path)
+        if seg_mask is None:
+            raise IOError(f'No seg_mask found for image file: {image_path}')
+        elif not image.mode == "RGB":
+            image = image.convert("RGB")
+
         image = image.resize((self.size, self.size), resample=Image.Resampling.LANCZOS)
         image = np.array(image).astype(np.uint8)
         orig_img = image.copy()
-        processed = self.preprocessor(image=image)
+        seg_mask = np.array(Image.fromarray(seg_mask)
+                            .convert("L")
+                            .resize((self.size, self.size),
+                                    resample=PIL.Image.Resampling.NEAREST))
+        orig_seg_mask = seg_mask.copy()
+        processed = self.preprocessor(image=image, mask=seg_mask)
         image = processed['image']
-        # Normalize
+        seg_mask = processed['mask']
+        image = np.concatenate([image, seg_mask[:,:,np.newaxis]],axis=2)
         image = (image/127.5 - 1.0).astype(np.float32)
-        return {"image": image}
+        orig_img = np.concatenate([orig_img, orig_seg_mask[:,:,np.newaxis]],axis=2)
+        orig_img = (orig_img/127.5 - 1.0).astype(np.float32)
+        return {"image": image, "orig_img": orig_img}
 
     def __getitem__(self, i):
         return self.preprocess_image(self.labels["file_path_"][i])
